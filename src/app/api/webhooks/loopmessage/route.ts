@@ -175,19 +175,30 @@ export async function POST(request: NextRequest) {
       // Cancel any previous request for this group and create new abort controller
       const abortController = requestManager.cancelAndCreate(groupId);
 
-      // Process message generation asynchronously (don't await)
-      processMessageAsync(
-        webhook,
-        groupId,
-        senderName,
-        abortController.signal
-      ).catch((error) => {
-        console.error("Error in async message processing:", error);
-        console.error("Error stack:", error.stack);
-      });
+      try {
+        // Await the full process to ensure it completes in serverless environments
+        await processMessageAsync(
+          webhook,
+          groupId,
+          senderName,
+          abortController.signal
+        );
 
-      // Return immediately to acknowledge webhook
-      return NextResponse.json({ success: true }, { status: 200 });
+        console.log("Message processing completed successfully");
+        return NextResponse.json({ success: true }, { status: 200 });
+      } catch (error) {
+        console.error("Error in message processing:", error);
+        console.error("Error stack:", (error as Error).stack);
+
+        // Still return 200 to prevent webhook retries
+        return NextResponse.json(
+          {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+          },
+          { status: 200 }
+        );
+      }
     }
 
     // Handle message_sent event - store sent messages
