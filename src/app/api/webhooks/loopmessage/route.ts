@@ -33,29 +33,59 @@ async function processMessageAsync(
   try {
     console.log("Starting async message processing for group:", groupId);
 
-    // Save message to Supabase
+    // Save message to Supabase (use upsert to handle duplicates gracefully)
     console.log("Saving message to database...");
-    const { error: dbError } = await supabaseServer.from("messages").insert({
-      message_id: webhook.message_id,
-      webhook_id: webhook.webhook_id,
-      group_id: groupId,
-      group_name: webhook.group?.name || null,
-      sender_name: senderName,
-      recipient: webhook.recipient || null,
-      text: webhook.text || null,
-      message_type: webhook.message_type || "text",
-      alert_type: webhook.alert_type,
-      attachments: webhook.attachments || null,
-      participants: webhook.group?.participants || [],
-      is_assistant: false, // Inbound messages are from users, not assistant
-    });
+    try {
+      const { error: dbError } = (await Promise.race([
+        supabaseServer.from("messages").upsert(
+          {
+            message_id: webhook.message_id,
+            webhook_id: webhook.webhook_id,
+            group_id: groupId,
+            group_name: webhook.group?.name || null,
+            sender_name: senderName,
+            recipient: webhook.recipient || null,
+            text: webhook.text || null,
+            message_type: webhook.message_type || "text",
+            alert_type: webhook.alert_type,
+            attachments: webhook.attachments || null,
+            participants: webhook.group?.participants || [],
+            is_assistant: false, // Inbound messages are from users, not assistant
+          },
+          {
+            onConflict: "message_id", // Use message_id as the conflict resolution key
+          }
+        ),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Database insert timeout after 5s")),
+            5000
+          )
+        ),
+      ])) as any;
 
-    if (dbError) {
-      console.error("Error saving message to database:", dbError);
-      return;
+      if (dbError) {
+        // Check if it's a duplicate key error (which is okay)
+        if (
+          dbError.code === "23505" ||
+          dbError.message?.includes("duplicate") ||
+          dbError.message?.includes("already exists")
+        ) {
+          console.log("Message already exists, continuing...");
+        } else {
+          console.error("Error saving message to database:", dbError);
+          console.error("Error code:", dbError.code);
+          console.error("Error message:", dbError.message);
+          // Continue anyway - don't block processing
+        }
+      } else {
+        console.log("Message saved to database:", webhook.message_id);
+      }
+    } catch (timeoutError: any) {
+      console.error("Database operation timed out:", timeoutError.message);
+      // Continue anyway - don't block processing
+      console.log("Continuing despite database timeout...");
     }
-
-    console.log("Message saved to database:", webhook.message_id);
 
     // Check if request was cancelled
     if (abortSignal.aborted) {
