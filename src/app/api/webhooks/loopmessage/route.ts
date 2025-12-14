@@ -3,7 +3,6 @@ import { supabaseServer } from "@/lib/supabase";
 import { sendGroupMessage } from "@/lib/loopmessage";
 import { generateChatResponse } from "@/lib/openai";
 import { requestManager } from "@/lib/request-manager";
-import { checkSupabaseHealth } from "@/lib/supabase-health";
 
 interface LoopMessageWebhook {
   alert_type: string;
@@ -34,15 +33,9 @@ async function processMessageAsync(
   try {
     console.log("Starting async message processing for group:", groupId);
 
-    // Run health check on first message
-    if (process.env.NODE_ENV === "production") {
-      await checkSupabaseHealth();
-    }
-
-    // Save message to Supabase with timeout
+    // Save message to Supabase
     console.log("Saving message to database...");
-
-    const savePromise = supabaseServer.from("messages").insert({
+    const { error: dbError } = await supabaseServer.from("messages").insert({
       message_id: webhook.message_id,
       webhook_id: webhook.webhook_id,
       group_id: groupId,
@@ -57,39 +50,12 @@ async function processMessageAsync(
       is_assistant: false, // Inbound messages are from users, not assistant
     });
 
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(
-        () => reject(new Error("Database insert timeout after 10s")),
-        10000
-      )
-    );
-
-    try {
-      const { error: dbError } = (await Promise.race([
-        savePromise,
-        timeoutPromise,
-      ])) as any;
-
-      if (dbError) {
-        console.error("❌ Error saving message to database:", dbError);
-        console.error("Error code:", dbError.code);
-        console.error("Error details:", dbError.details);
-        console.error("Error hint:", dbError.hint);
-        console.error("Error message:", dbError.message);
-        // Continue anyway - don't block processing
-      } else {
-        console.log("✅ Message saved to database:", webhook.message_id);
-      }
-    } catch (timeoutError: any) {
-      console.error("⏱️ Database operation timed out:", timeoutError.message);
-      console.error("This usually indicates:");
-      console.error(
-        "1. Wrong Supabase key (using publishable instead of secret)"
-      );
-      console.error("2. RLS policies blocking the insert");
-      console.error("3. Network connectivity issues");
-      // Continue anyway - don't block processing
+    if (dbError) {
+      console.error("Error saving message to database:", dbError);
+      //   return;
     }
+
+    console.log("Message saved to database:", webhook.message_id);
 
     // Check if request was cancelled
     if (abortSignal.aborted) {
