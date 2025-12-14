@@ -203,7 +203,11 @@ IMPORTANT: Mimic the style of the messages in the group chat as closely as possi
       console.log(`📋 Conversation history summary:`);
       conversationMessages.forEach((msg, i) => {
         if (msg.role === "system") {
-          console.log(`  ${i}. [SYSTEM] ${msg.content.substring(0, 50)}...`);
+          const content =
+            typeof msg.content === "string"
+              ? msg.content
+              : JSON.stringify(msg.content);
+          console.log(`  ${i}. [SYSTEM] ${content.substring(0, 50)}...`);
         } else if (msg.role === "user") {
           console.log(
             `  ${i}. [USER] ${
@@ -213,13 +217,21 @@ IMPORTANT: Mimic the style of the messages in the group chat as closely as possi
             }...`
           );
         } else if (msg.role === "assistant") {
+          const content =
+            typeof msg.content === "string"
+              ? msg.content
+              : JSON.stringify(msg.content);
           console.log(
-            `  ${i}. [ASSISTANT] content: ${
-              msg.content || "(none)"
-            }, tool_calls: ${msg.tool_calls?.length || 0}`
+            `  ${i}. [ASSISTANT] content: ${content || "(none)"}, tool_calls: ${
+              msg.tool_calls?.length || 0
+            }`
           );
         } else if (msg.role === "tool") {
-          console.log(`  ${i}. [TOOL] ${msg.content.substring(0, 100)}...`);
+          const content =
+            typeof msg.content === "string"
+              ? msg.content
+              : JSON.stringify(msg.content);
+          console.log(`  ${i}. [TOOL] ${content.substring(0, 100)}...`);
         }
       });
 
