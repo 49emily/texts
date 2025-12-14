@@ -51,7 +51,7 @@ async function processMessageAsync(
 
     if (dbError) {
       console.error("Error saving message to database:", dbError);
-      //   return;
+      return;
     }
 
     console.log("Message saved to database:", webhook.message_id);
@@ -62,7 +62,7 @@ async function processMessageAsync(
       return;
     }
 
-    // Fetch the 10 most recent messages for this group
+    // Fetch the 5 most recent messages for this group
     console.log("Fetching recent messages...");
     const { data: recentMessages, error: fetchError } = await supabaseServer
       .from("messages")
