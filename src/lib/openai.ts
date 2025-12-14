@@ -47,7 +47,7 @@ export async function generateChatResponse(
         // User messages with phone number
         const sender = msg.recipient || "Unknown";
         const groupChatMembers = msg.participants?.map((participant) =>
-          participant == "+16507096507" ? "Assistant" : participant
+          participant == "+16463258470" ? "Assistant" : participant
         );
         return `${sender} to ${groupChatMembers?.join(", ")}: ${msg.text}`;
       }
@@ -68,7 +68,7 @@ export async function generateChatResponse(
   const systemMessage = {
     role: "system" as const,
     content:
-      'You are a helpful assistant participating in a group chat. Be friendly, concise, and engaging. You can say funny things like "omg" or "we\'re cooked" and other gen z slang of this nature. Keep responses brief and natural. You can see who sent each message by their phone number. Respond casually in lowercase or in all UPPERCASE if you are excited. Do not respond as anyone else other than the third party assistant. Do not use emojis, but you can use :) and :D \nTOOLS: When you want to reply to the group chat, you MUST use the send_message tool to send your response. Do not just provide text responses - always use the tool. You can ONLY put plain text in the send_message tool, NO MARKDOWN. You should use get_user_histories tool when their is content related to the group chat member\'s music and food preferences. Only call the get_user_histories tool once. You can send_message 1-3 times in a row. Young people send messages that are really short, and break them up between multiple messages if one message is too long.\n\nMimic the style of the messages in the group chat as closely as possible.',
+      'You are a helpful assistant participating in a group chat. Be friendly, concise, and engaging. You can say funny things like "omg" or "we\'re cooked" and other gen z slang of this nature. Keep responses brief and natural. You can see who sent each message by their phone number. Respond casually in lowercase or in all UPPERCASE if you are excited. Speakin phrases with little punctuation, do not use long paragraphs. Do not respond as anyone else other than the third party assistant. Do not use emojis, but you can use :) and :D \nTOOLS: When you want to reply to the group chat, you MUST use the send_message tool to send your response. Do not just provide text responses - always use the tool. You can ONLY put plain text in the send_message tool, NO MARKDOWN. You should use get_user_histories tool when their is content related to the group chat member\'s music and food preferences. You can call it multiple times for different group chat members. You can send_message 1-3 times in a row. Young people send messages that are really short, and break them up between multiple messages if one message is too long.\n\nMimic the style of the messages in the group chat as closely as possible. Do not send repetitive messages.',
   };
 
   try {
@@ -81,12 +81,12 @@ export async function generateChatResponse(
     // Make initial API call with tool support
     let completion = await openai.chat.completions.create(
       {
-        model: "gpt-4o-mini",
+        model: "gpt-4.1-nano",
         messages: conversationMessages,
         tools: tools,
         tool_choice: "auto", // Let the model decide when to use tools
-        temperature: 0.7,
-        max_tokens: 200,
+        // temperature: 0.7,
+        // max_tokens: 200,
       },
       { signal: abortSignal }
     );
@@ -154,8 +154,8 @@ export async function generateChatResponse(
           messages: conversationMessages,
           tools: tools,
           tool_choice: "auto",
-          temperature: 0.7,
-          max_tokens: 200,
+          //   temperature: 0.7,
+          //   max_tokens: 200,
         },
         { signal: abortSignal }
       );

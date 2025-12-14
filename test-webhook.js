@@ -32,14 +32,14 @@ const webhooks = {
     group: {
       group_id: "d1201ebc-a7bd-4c38-a32f-f0743a1f920a",
       name: "",
-      participants: ["+16507096507", "+19709992198"],
+      participants: ["+16463258470", "+19709992198"],
     },
     language: { code: "en", name: "English" },
     message_id: uuidv4(),
     message_type: "text",
     recipient: "+16507096507",
     sender_name: "thirdwheel@a.imsg.co",
-    text: "what are our fav songs",
+    text: "what are our fav songs, me and cathy",
     webhook_id: uuidv4(),
   },
 };
