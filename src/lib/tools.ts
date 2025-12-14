@@ -1,5 +1,5 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-import { sendGroupMessage } from "./loopmessage";
+import { sendGroupMessage, sendGroupAudioMessage } from "./loopmessage";
 import { getInternalHistories } from "./homie";
 /**
  * Tool definitions for the OpenAI agent
@@ -51,6 +51,29 @@ export const tools: ChatCompletionTool[] = [
           },
         },
         required: ["phone_number", "category"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_audio_message",
+      description:
+        "Send an audio or voice message to the group chat. The audio file must be hosted at a publicly accessible HTTPS URL. Supported formats: mp3, wav, m4a, caf, aac. Use this only after get_user_histories was called for music preferences.",
+      parameters: {
+        type: "object",
+        properties: {
+          text: {
+            type: "string",
+            description: "A text description of the audio message",
+          },
+          media_url: {
+            type: "string",
+            description:
+              "The full HTTPS URL of the audio file (must start with https://). Max length: 256 characters. Must be publicly accessible without authentication.",
+          },
+        },
+        required: ["text", "media_url"],
       },
     },
   },
@@ -123,6 +146,39 @@ export const toolExecutors: ToolExecutor = {
       return JSON.stringify({
         success: false,
         error: error.message || "Failed to fetch user histories",
+      });
+    }
+  },
+  send_audio_message: async (
+    args: { text: string; media_url: string },
+    context: ToolContext
+  ) => {
+    try {
+      // Validate that the URL starts with https://
+      if (!args.media_url.startsWith("https://")) {
+        throw new Error("media_url must start with https://");
+      }
+
+      // Validate URL length
+      if (args.media_url.length > 256) {
+        throw new Error("media_url must be less than 256 characters");
+      }
+
+      await sendGroupAudioMessage(
+        context.groupId,
+        args.text,
+        args.media_url,
+        context.senderName
+      );
+
+      return JSON.stringify({
+        success: true,
+        message: "Audio message sent successfully",
+      });
+    } catch (error: any) {
+      return JSON.stringify({
+        success: false,
+        error: error.message || "Failed to send audio message",
       });
     }
   },
