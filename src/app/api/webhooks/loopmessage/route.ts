@@ -31,7 +31,10 @@ async function processMessageAsync(
   abortSignal: AbortSignal
 ) {
   try {
+    console.log("Starting async message processing for group:", groupId);
+
     // Save message to Supabase
+    console.log("Saving message to database...");
     const { error: dbError } = await supabaseServer.from("messages").insert({
       message_id: webhook.message_id,
       webhook_id: webhook.webhook_id,
@@ -61,6 +64,7 @@ async function processMessageAsync(
     }
 
     // Fetch the 10 most recent messages for this group
+    console.log("Fetching recent messages...");
     const { data: recentMessages, error: fetchError } = await supabaseServer
       .from("messages")
       .select("*")
@@ -78,6 +82,8 @@ async function processMessageAsync(
       return;
     }
 
+    console.log(`Found ${recentMessages.length} recent messages`);
+
     // Check if request was cancelled
     if (abortSignal.aborted) {
       console.log("Request cancelled before generating response");
@@ -88,6 +94,7 @@ async function processMessageAsync(
     console.log(`Using ${recentMessages.length} recent messages`);
 
     // Generate OpenAI response
+    console.log("Calling OpenAI...");
     const aiResponse = await generateChatResponse(
       recentMessages.map((msg) => ({
         text: msg.text,
@@ -109,11 +116,13 @@ async function processMessageAsync(
     console.log(`Generated response: ${aiResponse}`);
 
     // Send the generated response
+    console.log("Sending response to group...");
     await sendGroupMessage(groupId, aiResponse, senderName);
     console.log("Sent AI-generated reply to group");
 
     // Clean up abort controller
     requestManager.remove(groupId);
+    console.log("Message processing completed successfully");
   } catch (error: any) {
     // Clean up abort controller on error
     requestManager.remove(groupId);
@@ -124,6 +133,11 @@ async function processMessageAsync(
     }
 
     console.error("Error processing message:", error);
+    console.error("Error details:", {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    });
     throw error;
   }
 }
@@ -158,17 +172,8 @@ export async function POST(request: NextRequest) {
     else if (webhook.alert_type === "message_inbound") {
       console.log("Inbound message in group:", groupId);
 
-      // Show typing indicator (60 seconds max - will be hidden when we send reply)
-      const typingDuration = 60; // Max duration to allow time for OpenAI generation
-
       // Cancel any previous request for this group and create new abort controller
       const abortController = requestManager.cancelAndCreate(groupId);
-
-      // Return typing indicator immediately
-      const response = NextResponse.json(
-        { typing: typingDuration },
-        { status: 200 }
-      );
 
       // Process message generation asynchronously (don't await)
       processMessageAsync(
@@ -177,12 +182,12 @@ export async function POST(request: NextRequest) {
         senderName,
         abortController.signal
       ).catch((error) => {
-        if (error.message !== "Request cancelled") {
-          console.error("Error in async message processing:", error);
-        }
+        console.error("Error in async message processing:", error);
+        console.error("Error stack:", error.stack);
       });
 
-      return response;
+      // Return immediately to acknowledge webhook
+      return NextResponse.json({ success: true }, { status: 200 });
     }
 
     // Handle message_sent event - store sent messages
