@@ -101,6 +101,7 @@ async function processMessageAsync(
         created_at: msg.created_at,
         message_type: msg.message_type,
         is_assistant: msg.is_assistant || false,
+        participants: msg.participants,
         recipient: msg.recipient, // Phone number of the person who sent the message
       })),
       {

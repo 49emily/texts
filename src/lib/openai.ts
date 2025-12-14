@@ -12,6 +12,7 @@ interface Message {
   created_at: string;
   message_type: string;
   is_assistant?: boolean;
+  participants?: string[];
   recipient?: string | null; // Phone number of the person who sent the message (counterintuitive API naming)
 }
 
@@ -45,7 +46,10 @@ export async function generateChatResponse(
       } else {
         // User messages with phone number
         const sender = msg.recipient || "Unknown";
-        return `${sender}: ${msg.text}`;
+        const groupChatMembers = msg.participants?.map((participant) =>
+          participant == "+16507096507" ? "Assistant" : participant
+        );
+        return `${sender} to ${groupChatMembers?.join(", ")}: ${msg.text}`;
       }
     })
     .join("\n");
@@ -54,7 +58,7 @@ export async function generateChatResponse(
   const formattedMessages = [
     {
       role: "user" as const,
-      content: `Here is the recent conversation from a group chat:\n\n${conversationContext}`,
+      content: `Here is the recent conversation from the group chat:\n\n${conversationContext}`,
     },
   ];
 
