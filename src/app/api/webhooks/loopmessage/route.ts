@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase";
+import { sendGroupMessage } from "@/lib/loopmessage";
+import { generateChatResponse } from "@/lib/openai";
+import { requestManager } from "@/lib/request-manager";
 
 interface LoopMessageWebhook {
   alert_type: string;
@@ -10,6 +13,7 @@ interface LoopMessageWebhook {
   sender_name?: string;
   message_type?: string;
   attachments?: string[];
+  success?: boolean;
   group?: {
     group_id: string;
     name?: string;
@@ -17,45 +21,111 @@ interface LoopMessageWebhook {
   };
 }
 
-interface SendMessagePayload {
-  group: string;
-  text: string;
-  sender_name: string;
-}
-
-async function sendGroupMessage(
+/**
+ * Process message asynchronously: save, fetch history, generate response, send
+ */
+async function processMessageAsync(
+  webhook: LoopMessageWebhook,
   groupId: string,
-  text: string,
-  senderName: string
+  senderName: string,
+  abortSignal: AbortSignal
 ) {
-  const payload: SendMessagePayload = {
-    group: groupId,
-    text: text,
-    sender_name: senderName,
-  };
+  try {
+    // Save message to Supabase
+    const { error: dbError } = await supabaseServer.from("messages").insert({
+      message_id: webhook.message_id,
+      webhook_id: webhook.webhook_id,
+      group_id: groupId,
+      group_name: webhook.group?.name || null,
+      sender_name: senderName,
+      recipient: webhook.recipient || null,
+      text: webhook.text || null,
+      message_type: webhook.message_type || "text",
+      alert_type: webhook.alert_type,
+      attachments: webhook.attachments || null,
+      participants: webhook.group?.participants || [],
+      is_assistant: false, // Inbound messages are from users, not assistant
+    });
 
-  const response = await fetch(
-    "https://server.loopmessage.com/api/v1/message/send/",
-    {
-      method: "POST",
-      headers: {
-        Authorization: process.env.LOOPMESSAGE_AUTH_KEY || "",
-        "Loop-Secret-Key": process.env.LOOPMESSAGE_SECRET_KEY || "",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+    if (dbError) {
+      console.error("Error saving message to database:", dbError);
+      return;
     }
-  );
 
-  if (!response.ok) {
-    const error = await response.json();
-    console.error("Failed to send message:", error);
-    throw new Error(
-      `Failed to send message: ${error.message || "Unknown error"}`
+    console.log("Message saved to database:", webhook.message_id);
+
+    // Check if request was cancelled
+    if (abortSignal.aborted) {
+      console.log("Request cancelled before fetching messages");
+      return;
+    }
+
+    // Fetch the 10 most recent messages for this group
+    const { data: recentMessages, error: fetchError } = await supabaseServer
+      .from("messages")
+      .select("*")
+      .eq("group_id", groupId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (fetchError) {
+      console.error("Error fetching recent messages:", fetchError);
+      return;
+    }
+
+    if (!recentMessages || recentMessages.length === 0) {
+      console.log("No messages found for group");
+      return;
+    }
+
+    // Check if request was cancelled
+    if (abortSignal.aborted) {
+      console.log("Request cancelled before generating response");
+      return;
+    }
+
+    console.log(`\n📨 Generating response for Group ${groupId}`);
+    console.log(`Using ${recentMessages.length} recent messages`);
+
+    // Generate OpenAI response
+    const aiResponse = await generateChatResponse(
+      recentMessages.map((msg) => ({
+        text: msg.text,
+        sender_name: msg.sender_name,
+        created_at: msg.created_at,
+        message_type: msg.message_type,
+        is_assistant: msg.is_assistant || false,
+        recipient: msg.recipient, // Phone number of the person who sent the message
+      })),
+      abortSignal
     );
-  }
 
-  return response.json();
+    // Check if request was cancelled after generation
+    if (abortSignal.aborted) {
+      console.log("Request cancelled after generating response");
+      return;
+    }
+
+    console.log(`Generated response: ${aiResponse}`);
+
+    // Send the generated response
+    await sendGroupMessage(groupId, aiResponse, senderName);
+    console.log("Sent AI-generated reply to group");
+
+    // Clean up abort controller
+    requestManager.remove(groupId);
+  } catch (error: any) {
+    // Clean up abort controller on error
+    requestManager.remove(groupId);
+
+    if (error.message === "Request cancelled") {
+      console.log("Request was cancelled");
+      return;
+    }
+
+    console.error("Error processing message:", error);
+    throw error;
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -88,14 +158,74 @@ export async function POST(request: NextRequest) {
     else if (webhook.alert_type === "message_inbound") {
       console.log("Inbound message in group:", groupId);
 
-      // Save message to Supabase
-      try {
+      // Show typing indicator (60 seconds max - will be hidden when we send reply)
+      const typingDuration = 60; // Max duration to allow time for OpenAI generation
+
+      // Cancel any previous request for this group and create new abort controller
+      const abortController = requestManager.cancelAndCreate(groupId);
+
+      // Return typing indicator immediately
+      const response = NextResponse.json(
+        { typing: typingDuration },
+        { status: 200 }
+      );
+
+      // Process message generation asynchronously (don't await)
+      processMessageAsync(
+        webhook,
+        groupId,
+        senderName,
+        abortController.signal
+      ).catch((error) => {
+        if (error.message !== "Request cancelled") {
+          console.error("Error in async message processing:", error);
+        }
+      });
+
+      return response;
+    }
+
+    // Handle message_sent event - store sent messages
+    else if (webhook.alert_type === "message_sent") {
+      console.log("Message sent:", webhook.message_id);
+
+      // For group messages, we need to find the group_id
+      // Try to get it from the webhook group field first
+      let groupIdForSent = webhook.group?.group_id;
+
+      //   // If no group in webhook, try to find it from recent messages
+      //   if (!groupIdForSent) {
+      //     // Look up the group_id from recent messages sent by our sender within the last 5 minutes
+      //     // This handles the case where message_sent webhook doesn't include group info
+      //     const fiveMinutesAgo = new Date(
+      //       Date.now() - 5 * 60 * 1000
+      //     ).toISOString();
+
+      //     const { data: recentSentMessage } = await supabaseServer
+      //       .from("messages")
+      //       .select("group_id")
+      //       .eq("sender_name", senderName)
+      //       .eq("is_assistant", true)
+      //       .not("group_id", "is", null)
+      //       .gte("created_at", fiveMinutesAgo)
+      //       .order("created_at", { ascending: false })
+      //       .limit(1)
+      //       .single();
+
+      //     if (recentSentMessage?.group_id) {
+      //       groupIdForSent = recentSentMessage.group_id;
+      //       console.log(`Found group_id from recent messages: ${groupIdForSent}`);
+      //     }
+      //   }
+
+      // Only save if we have group_id or if it's a direct message (recipient without group)
+      if (groupIdForSent || webhook.recipient) {
         const { error: dbError } = await supabaseServer
           .from("messages")
           .insert({
             message_id: webhook.message_id,
             webhook_id: webhook.webhook_id,
-            group_id: groupId,
+            group_id: groupIdForSent || null,
             group_name: webhook.group?.name || null,
             sender_name: senderName,
             recipient: webhook.recipient || null,
@@ -104,51 +234,21 @@ export async function POST(request: NextRequest) {
             alert_type: webhook.alert_type,
             attachments: webhook.attachments || null,
             participants: webhook.group?.participants || [],
+            is_assistant: true, // Sent messages are from assistant
           });
 
         if (dbError) {
-          console.error("Error saving message to database:", dbError);
-          // Continue processing even if DB save fails
+          console.error("Error saving sent message to database:", dbError);
         } else {
-          console.log("Message saved to database:", webhook.message_id);
-
-          // Fetch the 10 most recent messages for this group
-          try {
-            const { data: recentMessages, error: fetchError } =
-              await supabaseServer
-                .from("messages")
-                .select("*")
-                .eq("group_id", groupId)
-                .order("created_at", { ascending: false })
-                .limit(10);
-
-            if (fetchError) {
-              console.error("Error fetching recent messages:", fetchError);
-            } else {
-              console.log(`\n📨 10 Most Recent Messages for Group ${groupId}:`);
-              console.log("=".repeat(60));
-              recentMessages?.forEach((msg, index) => {
-                console.log(
-                  `\n[${index + 1}] ${msg.created_at} | ${msg.message_type}`
-                );
-                console.log(`    Text: ${msg.text || "(no text)"}`);
-                console.log(`    Message ID: ${msg.message_id}`);
-                console.log(`    Sender: ${msg.sender_name}`);
-              });
-              console.log("=".repeat(60) + "\n");
-            }
-          } catch (fetchError) {
-            console.error("Exception fetching recent messages:", fetchError);
-          }
+          console.log("Sent message saved to database:", webhook.message_id);
         }
-      } catch (dbError) {
-        console.error("Exception saving message to database:", dbError);
-        // Continue processing even if DB save fails
+      } else {
+        console.log(
+          "Skipping sent message save - no group_id or recipient found"
+        );
       }
 
-      // Send "hiiii" message
-      await sendGroupMessage(groupId, "hiiii", senderName);
-      console.log("Sent reply to group");
+      return NextResponse.json({ success: true }, { status: 200 });
     }
 
     // Return 200 status to acknowledge webhook receipt
