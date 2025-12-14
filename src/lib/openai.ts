@@ -50,7 +50,7 @@ export async function generateChatResponse(
   const formattedMessages = [
     {
       role: "user" as const,
-      content: `Here is the recent conversation from a group chat:\n\n${conversationContext}\n\nPlease respond naturally to the most recent message in this group chat.`,
+      content: `Here is the recent conversation from a group chat:\n\n${conversationContext}\n\nPlease respond naturally as an Assistant to the most recent message in this group chat.`,
     },
   ];
 
@@ -58,7 +58,7 @@ export async function generateChatResponse(
   const systemMessage = {
     role: "system" as const,
     content:
-      "You are a helpful assistant participating in a group chat. Be friendly, concise, and engaging. Keep responses brief and natural. You can see who sent each message by their phone number.",
+      "You are a helpful assistant participating in a group chat. Be friendly, concise, and engaging. Keep responses brief and natural. You can see who sent each message by their phone number. Respond casually in lowercase",
   };
 
   try {

@@ -3,6 +3,7 @@ import { supabaseServer } from "@/lib/supabase";
 import { sendGroupMessage } from "@/lib/loopmessage";
 import { generateChatResponse } from "@/lib/openai";
 import { requestManager } from "@/lib/request-manager";
+import { checkSupabaseHealth } from "@/lib/supabase-health";
 
 interface LoopMessageWebhook {
   alert_type: string;
@@ -33,58 +34,61 @@ async function processMessageAsync(
   try {
     console.log("Starting async message processing for group:", groupId);
 
-    // Save message to Supabase (use upsert to handle duplicates gracefully)
+    // Run health check on first message
+    if (process.env.NODE_ENV === "production") {
+      await checkSupabaseHealth();
+    }
+
+    // Save message to Supabase with timeout
     console.log("Saving message to database...");
+
+    const savePromise = supabaseServer.from("messages").insert({
+      message_id: webhook.message_id,
+      webhook_id: webhook.webhook_id,
+      group_id: groupId,
+      group_name: webhook.group?.name || null,
+      sender_name: senderName,
+      recipient: webhook.recipient || null,
+      text: webhook.text || null,
+      message_type: webhook.message_type || "text",
+      alert_type: webhook.alert_type,
+      attachments: webhook.attachments || null,
+      participants: webhook.group?.participants || [],
+      is_assistant: false, // Inbound messages are from users, not assistant
+    });
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error("Database insert timeout after 10s")),
+        10000
+      )
+    );
+
     try {
       const { error: dbError } = (await Promise.race([
-        supabaseServer.from("messages").upsert(
-          {
-            message_id: webhook.message_id,
-            webhook_id: webhook.webhook_id,
-            group_id: groupId,
-            group_name: webhook.group?.name || null,
-            sender_name: senderName,
-            recipient: webhook.recipient || null,
-            text: webhook.text || null,
-            message_type: webhook.message_type || "text",
-            alert_type: webhook.alert_type,
-            attachments: webhook.attachments || null,
-            participants: webhook.group?.participants || [],
-            is_assistant: false, // Inbound messages are from users, not assistant
-          },
-          {
-            onConflict: "message_id", // Use message_id as the conflict resolution key
-          }
-        ),
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error("Database insert timeout after 5s")),
-            5000
-          )
-        ),
+        savePromise,
+        timeoutPromise,
       ])) as any;
 
       if (dbError) {
-        // Check if it's a duplicate key error (which is okay)
-        if (
-          dbError.code === "23505" ||
-          dbError.message?.includes("duplicate") ||
-          dbError.message?.includes("already exists")
-        ) {
-          console.log("Message already exists, continuing...");
-        } else {
-          console.error("Error saving message to database:", dbError);
-          console.error("Error code:", dbError.code);
-          console.error("Error message:", dbError.message);
-          // Continue anyway - don't block processing
-        }
+        console.error("❌ Error saving message to database:", dbError);
+        console.error("Error code:", dbError.code);
+        console.error("Error details:", dbError.details);
+        console.error("Error hint:", dbError.hint);
+        console.error("Error message:", dbError.message);
+        // Continue anyway - don't block processing
       } else {
-        console.log("Message saved to database:", webhook.message_id);
+        console.log("✅ Message saved to database:", webhook.message_id);
       }
     } catch (timeoutError: any) {
-      console.error("Database operation timed out:", timeoutError.message);
+      console.error("⏱️ Database operation timed out:", timeoutError.message);
+      console.error("This usually indicates:");
+      console.error(
+        "1. Wrong Supabase key (using publishable instead of secret)"
+      );
+      console.error("2. RLS policies blocking the insert");
+      console.error("3. Network connectivity issues");
       // Continue anyway - don't block processing
-      console.log("Continuing despite database timeout...");
     }
 
     // Check if request was cancelled
