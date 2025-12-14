@@ -161,20 +161,20 @@ IMPORTANT: Mimic the style of the messages in the group chat as closely as possi
 
           console.log(`✅ Tool response from ${functionName}:`);
           console.log(
-            `   ${functionResponse.substring(0, 2000)}${
-              functionResponse.length > 2000 ? "..." : ""
+            `   ${functionResponse.substring(0, 3000)}${
+              functionResponse.length > 3000 ? "..." : ""
             }`
           );
           console.log(`   Full length: ${functionResponse.length} chars`);
 
           // Truncate tool response to 2000 characters for context
           const truncatedResponse =
-            functionResponse.length > 2000
-              ? functionResponse.substring(0, 2000) +
+            functionResponse.length > 3000
+              ? functionResponse.substring(0, 3000) +
                 "\n... (truncated for context)"
               : functionResponse;
 
-          if (functionResponse.length > 2000) {
+          if (functionResponse.length > 3000) {
             console.log(
               `   ✂️  Truncated to ${truncatedResponse.length} chars for conversation context`
             );
