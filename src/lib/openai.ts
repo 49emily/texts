@@ -111,7 +111,7 @@ IMPORTANT: Mimic the style of the messages in the group chat as closely as possi
     }
 
     // Handle tool calls if the model wants to use them
-    const maxToolCalls = 5; // Prevent infinite loops
+    const maxToolCalls = 10; // Prevent infinite loops
     let toolCallCount = 0;
 
     while (responseMessage?.tool_calls && toolCallCount < maxToolCalls) {

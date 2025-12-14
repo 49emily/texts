@@ -118,8 +118,6 @@ async function processMessageAsync(
     }
 
     console.log(`AI response: ${aiResponse}`);
-    console.log("AI will send message via tool call");
-
     // Clean up abort controller
     requestManager.remove(groupId);
     console.log("Message processing completed successfully");
