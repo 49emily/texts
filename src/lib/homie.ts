@@ -19,7 +19,7 @@ export type BlockScope = "self" | "network";
 export interface BlockFilters {
   data_source_names?: string[];
   data_source_categories?: string[];
-  phone_numbers?: string[];
+  phone_numbers?: { phone_number: string }[];
   is_liked?: boolean;
 }
 
@@ -147,6 +147,7 @@ export interface GetInternalHistoriesResponse {
 export async function getInternalHistories(
   request: GetInternalHistoriesRequest
 ): Promise<GetInternalHistoriesResponse> {
+  console.log(`Request: ${JSON.stringify(request)}`);
   const response = await fetch(`${BASE_URL}/v1/recsys/internal/histories`, {
     method: "POST",
     headers: {
@@ -159,9 +160,12 @@ export async function getInternalHistories(
     const error = await response
       .json()
       .catch(() => ({ detail: "Unknown error" }));
-    throw new Error(
-      `API Error (${response.status}): ${error.detail || response.statusText}`
-    );
+
+    // Create a detailed error message - always stringify to handle objects
+    const errorMessage =
+      typeof error.detail === "string" ? error.detail : JSON.stringify(error);
+
+    throw new Error(`API Error (${response.status}): ${errorMessage}`);
   }
 
   return response.json();

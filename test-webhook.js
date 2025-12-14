@@ -6,6 +6,8 @@
  *   node test-webhook.js message_inbound
  */
 
+import { v4 as uuidv4 } from "uuid";
+
 const BASE_URL = process.env.TEST_URL || "http://localhost:3001";
 
 const webhooks = {
@@ -33,12 +35,12 @@ const webhooks = {
       participants: ["+16507096507", "+19709992198"],
     },
     language: { code: "en", name: "English" },
-    message_id: "367ef327-0a71-4496-AE6c-6c934900A73F",
+    message_id: uuidv4(),
     message_type: "text",
-    recipient: "+19709992198",
+    recipient: "+16507096507",
     sender_name: "thirdwheel@a.imsg.co",
-    text: "call",
-    webhook_id: "315d7c14-c421-44bc-8677-d3290f059848",
+    text: "what is my recent music",
+    webhook_id: uuidv4(),
   },
 };
 

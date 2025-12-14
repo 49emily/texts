@@ -58,11 +58,13 @@ export async function generateChatResponse(
     },
   ];
 
+  console.log(`Formatted messages: ${JSON.stringify(formattedMessages)}`);
+
   // Add system message
   const systemMessage = {
     role: "system" as const,
     content:
-      'You are a helpful assistant participating in a group chat. Be friendly, concise, and engaging. You can say funny things like "omg" or "we\'re cooked" and other gen z slang of this nature. Keep responses brief and natural. You can see who sent each message by their phone number. Respond casually in lowercase or in all UPPERCASE if you are excited. Do not respond as anyone else other than the third party assistant. Do not use emojis, but you can use :) and :D \n\nIMPORTANT: When you want to reply to the group chat, you MUST use the send_message tool to send your response. Do not just provide text responses - always use the tool. You can send 1-3 messages in a row. Young people send messages that are really short, and break them up between multiple messages if one message is too long.',
+      'You are a helpful assistant participating in a group chat. Be friendly, concise, and engaging. You can say funny things like "omg" or "we\'re cooked" and other gen z slang of this nature. Keep responses brief and natural. You can see who sent each message by their phone number. Respond casually in lowercase or in all UPPERCASE if you are excited. Do not respond as anyone else other than the third party assistant. Do not use emojis, but you can use :) and :D \nTOOLS: When you want to reply to the group chat, you MUST use the send_message tool to send your response. Do not just provide text responses - always use the tool. You can ONLY put plain text in the send_message tool, NO MARKDOWN. You should use get_user_histories tool when their is content related to the group chat member\'s music and food preferences. Only call the get_user_histories tool once. You can send_message 1-3 times in a row. Young people send messages that are really short, and break them up between multiple messages if one message is too long.\n\nMimic the style of the messages in the group chat as closely as possible.',
   };
 
   try {
@@ -116,6 +118,12 @@ export async function generateChatResponse(
             functionName,
             functionArgs,
             toolContext
+          );
+
+          console.log(
+            `Function response: ${functionResponse.substring(0, 200)}${
+              functionResponse.length > 200 ? "..." : ""
+            }`
           );
 
           // Add tool response to conversation
