@@ -45,4 +45,3 @@ export async function sendGroupMessage(
 
   return response.json();
 }
-

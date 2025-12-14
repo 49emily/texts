@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase";
-import { sendGroupMessage } from "@/lib/loopmessage";
 import { generateChatResponse } from "@/lib/openai";
 import { requestManager } from "@/lib/request-manager";
 
@@ -93,7 +92,7 @@ async function processMessageAsync(
     console.log(`\n📨 Generating response for Group ${groupId}`);
     console.log(`Using ${recentMessages.length} recent messages`);
 
-    // Generate OpenAI response
+    // Generate OpenAI response (with tool calls)
     console.log("Calling OpenAI...");
     const aiResponse = await generateChatResponse(
       recentMessages.map((msg) => ({
@@ -104,6 +103,10 @@ async function processMessageAsync(
         is_assistant: msg.is_assistant || false,
         recipient: msg.recipient, // Phone number of the person who sent the message
       })),
+      {
+        groupId: groupId,
+        senderName: senderName,
+      },
       abortSignal
     );
 
@@ -113,12 +116,8 @@ async function processMessageAsync(
       return;
     }
 
-    console.log(`Generated response: ${aiResponse}`);
-
-    // Send the generated response
-    console.log("Sending response to group...");
-    await sendGroupMessage(groupId, aiResponse, senderName);
-    console.log("Sent AI-generated reply to group");
+    console.log(`AI response: ${aiResponse}`);
+    console.log("AI will send message via tool call");
 
     // Clean up abort controller
     requestManager.remove(groupId);
