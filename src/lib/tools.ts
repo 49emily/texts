@@ -63,10 +63,10 @@ export const tools: ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          text: {
-            type: "string",
-            description: "A text description of the audio message",
-          },
+          // text: {
+          //   type: "string",
+          //   description: "A text description of the audio message",
+          // },
           media_url: {
             type: "string",
             description:
@@ -150,7 +150,7 @@ export const toolExecutors: ToolExecutor = {
     }
   },
   send_audio_message: async (
-    args: { text: string; media_url: string },
+    args: { media_url: string },
     context: ToolContext
   ) => {
     try {
@@ -166,7 +166,7 @@ export const toolExecutors: ToolExecutor = {
 
       await sendGroupAudioMessage(
         context.groupId,
-        args.text,
+        "",
         args.media_url,
         context.senderName
       );
