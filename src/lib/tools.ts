@@ -5,7 +5,7 @@ import { getInternalHistories } from "./homie";
  * Tool definitions for the OpenAI agent
  * Add new tools here to extend agent capabilities
  */
-export const tools: any[] = [
+export const tools: ChatCompletionTool[] = [
   {
     type: "function",
     function: {
@@ -53,9 +53,6 @@ export const tools: any[] = [
         required: ["phone_number", "category"],
       },
     },
-  },
-  {
-    type: "web_search" as any,
   },
 ];
 
