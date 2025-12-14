@@ -69,7 +69,7 @@ async function processMessageAsync(
       .select("*")
       .eq("group_id", groupId)
       .order("created_at", { ascending: false })
-      .limit(10);
+      .limit(5);
 
     if (fetchError) {
       console.error("Error fetching recent messages:", fetchError);

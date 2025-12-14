@@ -68,7 +68,7 @@ export async function generateChatResponse(
   const systemMessage = {
     role: "system" as const,
     content:
-      'You are a helpful assistant participating in a group chat. Be friendly, concise, and engaging. You can say funny things like "omg" or "we\'re cooked" and other gen z slang of this nature. Keep responses brief and natural. You can see who sent each message by their phone number. Respond casually in lowercase or in all UPPERCASE if you are excited. Speakin phrases with little punctuation, do not use long paragraphs. Do not respond as anyone else other than the third party assistant. Do not use emojis, but you can use :) and :D \nTOOLS: When you want to reply to the group chat, you MUST use the send_message tool to send your response. Do not just provide text responses - always use the tool. You can ONLY put plain text in the send_message tool, NO MARKDOWN. You should use get_user_histories tool when their is content related to the group chat member\'s music and food preferences. You can call it multiple times for different group chat members. You can send_message 1-3 times in a row. Young people send messages that are really short, and break them up between multiple messages if one message is too long.\n\nMimic the style of the messages in the group chat as closely as possible. Do not send repetitive messages.',
+      'You are a helpful assistant participating in a group chat. Be friendly, concise, and engaging. You can say funny things like "omg" or "we\'re cooked" and other gen z slang of this nature. Keep responses brief and natural. You can see who sent each message by their phone number. Respond casually in lowercase or in all UPPERCASE if you are excited. Speak in phrases with little punctuation, do not use long paragraphs. Do not respond as anyone else other than the third party assistant. Do not use emojis, but you can use :) and :D \nTOOLS: When you want to reply to the group chat, you MUST use the send_message tool to send your response. Do not just provide text responses - always use the tool. You can ONLY put plain text in the send_message tool, NO MARKDOWN. You should use get_user_histories tool when their is content related to the group chat member\'s music and food preferences. You can call it multiple times for different group chat members. You can send_message 1-3 times in a row. Young people send messages that are really short, and break them up between multiple messages if one message is too long.\n\nMimic the style of the messages in the group chat as closely as possible. Do not send repetitive messages.',
   };
 
   try {
@@ -79,6 +79,7 @@ export async function generateChatResponse(
     ];
 
     // Make initial API call with tool support
+    console.log("🤖 Making initial OpenAI API call...");
     let completion = await openai.chat.completions.create(
       {
         model: "gpt-4.1-nano",
@@ -92,6 +93,19 @@ export async function generateChatResponse(
     );
 
     let responseMessage = completion.choices[0]?.message;
+    console.log("📨 Initial response from OpenAI:");
+    console.log(`  - Has tool calls: ${!!responseMessage?.tool_calls}`);
+    console.log(`  - Content: ${responseMessage?.content || "(none)"}`);
+    if (responseMessage?.tool_calls) {
+      console.log(`  - Tool calls (${responseMessage.tool_calls.length}):`);
+      responseMessage.tool_calls.forEach((tc, i) => {
+        if (tc.type === "function") {
+          console.log(
+            `    ${i + 1}. ${tc.function.name}(${tc.function.arguments})`
+          );
+        }
+      });
+    }
 
     // Handle tool calls if the model wants to use them
     const maxToolCalls = 5; // Prevent infinite loops
@@ -99,9 +113,23 @@ export async function generateChatResponse(
 
     while (responseMessage?.tool_calls && toolCallCount < maxToolCalls) {
       toolCallCount++;
+      console.log(`\n${"=".repeat(60)}`);
+      console.log(`🔄 Tool call iteration ${toolCallCount}/${maxToolCalls}`);
+      console.log(`${"=".repeat(60)}`);
+      console.log(
+        `📊 Assistant decided to call ${responseMessage.tool_calls.length} tool(s):`
+      );
+      responseMessage.tool_calls.forEach((tc, i) => {
+        if (tc.type === "function") {
+          console.log(`   ${i + 1}. ${tc.function.name}`);
+        }
+      });
 
       // Add assistant's message with tool calls to conversation
       conversationMessages.push(responseMessage);
+      console.log(
+        `\n📝 Added assistant message with ${responseMessage.tool_calls.length} tool calls to conversation history`
+      );
 
       // Execute each tool call
       for (const toolCall of responseMessage.tool_calls) {
@@ -114,7 +142,8 @@ export async function generateChatResponse(
         const functionName = toolCall.function.name;
         const functionArgs = JSON.parse(toolCall.function.arguments);
 
-        console.log(`Executing tool: ${functionName}`, functionArgs);
+        console.log(`\n🔧 Executing tool: ${functionName}`);
+        console.log(`   Arguments: ${JSON.stringify(functionArgs, null, 2)}`);
 
         try {
           // Execute the tool
@@ -124,30 +153,73 @@ export async function generateChatResponse(
             toolContext
           );
 
+          console.log(`✅ Tool response from ${functionName}:`);
           console.log(
-            `Function response: ${functionResponse.substring(0, 200)}${
-              functionResponse.length > 200 ? "..." : ""
+            `   ${functionResponse.substring(0, 2000)}${
+              functionResponse.length > 2000 ? "..." : ""
             }`
           );
+          console.log(`   Full length: ${functionResponse.length} chars`);
+
+          // Truncate tool response to 2000 characters for context
+          const truncatedResponse =
+            functionResponse.length > 2000
+              ? functionResponse.substring(0, 2000) +
+                "\n... (truncated for context)"
+              : functionResponse;
+
+          if (functionResponse.length > 2000) {
+            console.log(
+              `   ✂️  Truncated to ${truncatedResponse.length} chars for conversation context`
+            );
+          }
 
           // Add tool response to conversation
           conversationMessages.push({
             role: "tool",
             tool_call_id: toolCall.id,
-            content: functionResponse,
+            content: truncatedResponse,
           });
+          console.log(`📝 Added tool response to conversation history`);
         } catch (error: any) {
-          console.error(`Error executing tool ${functionName}:`, error);
+          console.error(`❌ Error executing tool ${functionName}:`, error);
           // Add error response
           conversationMessages.push({
             role: "tool",
             tool_call_id: toolCall.id,
             content: JSON.stringify({ error: error.message }),
           });
+          console.log(`📝 Added error response to conversation history`);
         }
       }
 
       // Make another API call with the tool responses
+      console.log(
+        `\n🤖 Making follow-up OpenAI API call with ${conversationMessages.length} messages in history...`
+      );
+      console.log(`📋 Conversation history summary:`);
+      conversationMessages.forEach((msg, i) => {
+        if (msg.role === "system") {
+          console.log(`  ${i}. [SYSTEM] ${msg.content.substring(0, 50)}...`);
+        } else if (msg.role === "user") {
+          console.log(
+            `  ${i}. [USER] ${
+              typeof msg.content === "string"
+                ? msg.content.substring(0, 100)
+                : JSON.stringify(msg.content).substring(0, 100)
+            }...`
+          );
+        } else if (msg.role === "assistant") {
+          console.log(
+            `  ${i}. [ASSISTANT] content: ${
+              msg.content || "(none)"
+            }, tool_calls: ${msg.tool_calls?.length || 0}`
+          );
+        } else if (msg.role === "tool") {
+          console.log(`  ${i}. [TOOL] ${msg.content.substring(0, 100)}...`);
+        }
+      });
+
       completion = await openai.chat.completions.create(
         {
           model: "gpt-4o-mini",
@@ -161,10 +233,32 @@ export async function generateChatResponse(
       );
 
       responseMessage = completion.choices[0]?.message;
+      console.log(`\n📨 Response from OpenAI (iteration ${toolCallCount}):`);
+      console.log(`  - Has tool calls: ${!!responseMessage?.tool_calls}`);
+      console.log(`  - Content: ${responseMessage?.content || "(none)"}`);
+      if (responseMessage?.tool_calls) {
+        console.log(`  - Tool calls (${responseMessage.tool_calls.length}):`);
+        responseMessage.tool_calls.forEach((tc, i) => {
+          if (tc.type === "function") {
+            console.log(
+              `    ${i + 1}. ${tc.function.name}(${tc.function.arguments})`
+            );
+          }
+        });
+      }
+    }
+
+    if (toolCallCount >= maxToolCalls) {
+      console.log(
+        `\n⚠️  Reached maximum tool call iterations (${maxToolCalls})`
+      );
+    } else if (!responseMessage?.tool_calls) {
+      console.log(`\n✅ No more tool calls - assistant is done`);
     }
 
     // Extract final text response
     const response = responseMessage?.content;
+    console.log(`\n🎯 Final response content: ${response || "(none)"}`);
     if (!response) {
       throw new Error("No response generated from OpenAI");
     }
