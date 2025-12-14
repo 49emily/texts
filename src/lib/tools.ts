@@ -166,7 +166,7 @@ export const toolExecutors: ToolExecutor = {
 
       await sendGroupAudioMessage(
         context.groupId,
-        "",
+        "Audio message",
         args.media_url,
         context.senderName
       );
