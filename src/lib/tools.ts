@@ -54,6 +54,24 @@ export const tools: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "web_search",
+      description:
+        "Search the web for current information. Use this when you need real-time data, current events, or information not in your training data.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "The search query to look up on the web",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
 ];
 
 /**
@@ -123,6 +141,59 @@ export const toolExecutors: ToolExecutor = {
       return JSON.stringify({
         success: false,
         error: error.message || "Failed to fetch user histories",
+      });
+    }
+  },
+  web_search: async (args: { query: string }, context: ToolContext) => {
+    try {
+      const apiKey = process.env.TAVILY_API_KEY;
+      if (!apiKey) {
+        throw new Error("TAVILY_API_KEY environment variable is not set");
+      }
+
+      console.log(`🔍 Searching web for: ${args.query}`);
+
+      const response = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          api_key: apiKey,
+          query: args.query,
+          search_depth: "basic",
+          include_answer: true,
+          max_results: 5,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Tavily API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // Format results into a readable string
+      let result = "";
+      if (data.answer) {
+        result += `Answer: ${data.answer}\n\n`;
+      }
+
+      if (data.results && data.results.length > 0) {
+        result += "Sources:\n";
+        data.results.forEach((item: any, index: number) => {
+          result += `${index + 1}. ${item.title}\n`;
+          result += `   ${item.content}\n`;
+          result += `   URL: ${item.url}\n\n`;
+        });
+      }
+
+      return result || "No results found";
+    } catch (error: any) {
+      console.error("Web search error:", error);
+      return JSON.stringify({
+        success: false,
+        error: error.message || "Failed to perform web search",
       });
     }
   },
