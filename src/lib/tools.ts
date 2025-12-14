@@ -140,12 +140,29 @@ export const toolExecutors: ToolExecutor = {
         limit: args.limit || 20,
       });
 
-      return JSON.stringify({
+      // Remove tags from items to reduce response size
+      const itemsWithoutTags = response.items.map((item: any) => {
+        const itemCopy = { ...item };
+        if (itemCopy.media_info?.metadata?.tags) {
+          delete itemCopy.media_info.metadata.tags;
+        }
+        return itemCopy;
+      });
+
+      // Create response object
+      const responseObj = {
         success: true,
         count: response.items.length,
-        items: response.items,
+        items: itemsWithoutTags,
         has_more: response.cursor !== null,
-      });
+      };
+
+      // Convert to JSON string and truncate to 2000 characters
+      const jsonString = JSON.stringify(responseObj);
+      if (jsonString.length > 2000) {
+        return jsonString.substring(0, 2000) + '... (truncated)"}';
+      }
+      return jsonString;
     } catch (error: any) {
       return JSON.stringify({
         success: false,
