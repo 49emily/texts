@@ -39,7 +39,7 @@ const webhooks = {
     message_type: "text",
     recipient: "+16507096507",
     sender_name: "thirdwheel@a.imsg.co",
-    text: "what are our fav songs, me and cathy",
+    text: "give cathy the brunch recs in sf",
     webhook_id: uuidv4(),
   },
 };
