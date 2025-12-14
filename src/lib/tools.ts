@@ -40,7 +40,7 @@ export const tools: ChatCompletionTool[] = [
           },
           category: {
             type: "string",
-            enum: ["food", "music"],
+            enum: ["food", "music", "video"],
             description: "The category of histories to retrieve: food or music",
           },
           limit: {
@@ -111,7 +111,11 @@ export const toolExecutors: ToolExecutor = {
     }
   },
   get_user_histories: async (
-    args: { phone_number: string; category: "food" | "music"; limit?: number },
+    args: {
+      phone_number: string;
+      category: "food" | "music" | "video";
+      limit?: number;
+    },
     context: ToolContext
   ) => {
     try {
